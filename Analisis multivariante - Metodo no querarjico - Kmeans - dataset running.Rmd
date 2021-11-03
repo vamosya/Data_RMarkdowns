@@ -1,0 +1,132 @@
+---
+title: 'R: Método no querárjico - Kmeans con un dataset de actividades de carrera'
+author: "Carlos Peralta Parro"
+geometry: margin=1cm
+output:
+  
+  html_document:
+    theme: united
+    highlight: tango
+    
+    df_print: paged
+  pdf_document: 
+    extra_dependencies: ["xcolor"]
+---
+
+```{r setup, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=3, fig.align = "center", out.width = 1024, warning=FALSE)
+options(width = 160)
+library(knitr)
+library(dplyr)
+
+```
+
+*En este notebook voy a realizar un caso de análisis multivariante con kmeans para agrupar las actividades con diferentes características o perfile*
+
+*Recordemos que estamos trabajando sobre un dataset de actividades de carrera de un atleta*
+
+##### **Cargo el dataset limpio del notebook https://rpubs.com/cperaltap/actividad_1_limpieza** 
+
+````{r}
+
+act_data <- read.csv('act_data.csv')
+# Selecciono todas las variables menos las relacionadas con la fecha
+act_data_case <- act_data %>% select(Distancia, Calorias, Tiempo, FCMedia, Zancada, Ascenso, Velocidad)
+act_data_case
+
+````
+
+##### **Normalización de datos para que no tengan un peso diferente**
+
+````{r}
+
+act_data_norm <- scale(act_data_case)
+# Vemos un resumen de como han quedado ahora los datos
+head(act_data_norm)
+
+````
+
+##### **Ahora realizamos el modelo con kmeans**
+
+`````{r}
+
+# Fijo semilla dada la aleatoriedad de kmeans
+set.seed(123)
+
+# Lanzo para un centroide
+act_data_km <- (kmeans(act_data_norm, centers = 1)$betweenss)/
+  (kmeans(act_data_norm, centers = 1)$totss)
+
+# Itero para más centroides y poder ver la curva de progreso y valorar
+for(i in 2:10) act_data_km[i] <- 
+  (kmeans(act_data_norm, centers = i)$betweenss)/(kmeans(act_data_norm, centers = 1)$totss)
+
+# Grafico la curva
+plot(1:10, act_data_km, type="b", xlab = "número de clusters",
+     ylab = "% de varianza explicada")
+
+
+````
+
+> Vemos que con la gráfica del porcentaje de la varianza explicada, no vemos ningún “codo” o cambio de inclinación reseñable que nos haga decidirnos de forma relativamente objetiva sobre el número de clusters a usar, por lo que opto por hacerlo subjetivamente analizando bajo mi criterio los resultados de la tabla y de una gráfica que muestro.
+
+````{r}
+
+# Pongo semilla de nuevo
+set.seed(123)
+
+# Calculo 4 clusters
+act_data_km_4 <- kmeans(act_data_norm, centers = 4)
+
+# Creo los grupos agrupados por la media y los muestro
+grupos <- aggregate(act_data_case, by = list(act_data_km_4$cluster), mean)
+kable(grupos, col.names = c("cluster","Distancia","Calorias","Tiempo","FCMedia","Zancada","Ascenso","Velocidad"))
+
+````
+
+##### **Creo además un gráfico de puntos con los cluters del modelo apoyándome en la libreria factoextra **
+
+````{r, echo=FALSE, results='hide', message=FALSE}
+
+library(factoextra)
+
+````
+
+````{r}
+
+fviz_cluster(act_data_km_4, data = act_data_case,
+  palette = "Set2",
+  geom = "point",
+  ellipse.type = "convex",
+  ggtheme = theme_bw()
+  )
+
+````
+
+> Tras evaluarlo y decidir entre 3 y 4 clusters, me decido por 4 ya que se crean perfiles de carrera bien remarcados. 3 clusteres también habría sido una opción correcta.
+
+> Clasificos los resultados:
+- Custer 1: Distancias cortas con media menor de 5k, de menos de 30 minutos de carreta con un consumo bajo de calorias, poco ascenso (posible llanos) y velocidad cercana a 9.5 kmh. Frecuencia media baja, sobre 130. Podrían ser actividades de calentamiento o entrenamientos en época de lesiones para probar.
+- Cluster 2: Distancias largas, con la media por encima de 10Km, con alto consumo de calorias, casi 700. Duración aproximada de 1 hora por sesión, con una zancada de un metro y ascenso total por encima de 100m. La velocidad ronda los 10.5 kmh. Entrenos más serios, incluso alguna carrera.
+- Clústeres 3 y 4: Los comparo porque comparten distancias similares, entre 6 y 7, pero con distintas características. En el cluster 4 la velocidad y zancada es mayor y el ascenso y el tiempo menor, lo que hace indicar que son tipos de actividades similares. Pero el cluster 3, más "tranquilo", pueden ser entrenos, y en el 4 se agrupen entrenos más exigentes, con terreno más llano, y revisando la velocidad, incluso competitivas.
+
+##### **Terminado el análisis puede ser intersante ver si hay outliers y cuantos son**
+
+````{r}
+
+# Calculo los centroides
+centroides <- fitted(act_data_km_4)
+# Calculo las distancias 
+distancias <- sqrt(rowSums((act_data_case - centroides)^2))
+# Cuento los outliers
+length(boxplot.stats(distancias)$out)
+# Los muestro en un diagrama de caja
+boxplot(distancias)
+
+# Calculo porcentaje de outliers
+round(length(boxplot.stats(distancias)$out) / nrow(act_data_case), 3)
+
+````
+
+
+> Nos aparecen 12 outliers, que suponen un 2.6% de los registros, lo cual puedo considerar totalmente asumible en el modelo.

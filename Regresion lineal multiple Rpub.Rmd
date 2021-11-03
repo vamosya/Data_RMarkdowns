@@ -1,0 +1,116 @@
+---
+title: 'R: Regresión lineal múltiple sobre dataset de actividades de carrera'
+author: "Carlos Peralta Parro"
+geometry: margin=1cm
+output:
+  
+  html_document:
+    theme: united
+    highlight: tango
+    
+    df_print: paged
+  pdf_document: 
+    extra_dependencies: ["xcolor"]
+---
+
+```{r setup, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=3, fig.align = "center", out.width = 1024, warning=FALSE)
+options(width = 160)
+library(knitr)
+library(dplyr)
+
+```
+
+*A raiz de una necesidad en la limpieza de datos al encontrarme con varios NAs y con el objetivo de no ignorar esos registros, voy a aprovechas para hacer un modelo de regresión lineal y así obtener una predicción aproximada de esos valores apoyado por otras variables que tenemos*
+
+*Recordemos que estamos trabajando sobre un dataset de actividades de carrera de un atleta*
+
+##### **Cargo el csv para proseguir desde el notebook https://rpubs.com/cperaltap/actividad_1_limpieza** 
+
+````{r}
+
+act_data <- read.csv('act_data_prev_lm.csv')
+
+````
+
+##### **El objetivo es predecir la FCMedia donde falte**
+
+````{r}
+
+# Vemos las variables disponibles que podemos utilizar
+colnames(act_data)
+
+# Me quedo temporalmente con las filas que la FCMedia no es nula
+act_data_wo_na <- act_data %>% filter(!is.na(FCMedia))
+
+# Creo un primer modelo con varias variables y muestro un summary
+lm_act_data_wo_na <- lm(data = act_data_wo_na, FCMedia~Distancia+Velocidad+Calorias+Tiempo+Zancada+Ascenso)
+summary(lm_act_data_wo_na)
+
+````
+
+> A primera vista, veo en la evaluación del modelo que hay varias variables que no son signiticativas, puesto que su p-value < 0.1, por lo que realizaré otro modelo si estas, que son Tiempo, Zancada y Ascenso.
+
+````{r}
+
+# Creo un segundo modelo excluyendo las variables no significativas
+lm_act_data_wo_na <- lm(data = act_data_wo_na, FCMedia~Distancia+Velocidad+Calorias)
+summary(lm_act_data_wo_na)
+
+````
+
+> Todas son ahora bastantes significativas ya que el p-value es menor de 0.001. Veamos la correlación de las variables, por si hubiese que desestimar alguna por redundancia
+
+````{r}
+
+# Seleccionamos las columnas para buscar correlación
+act_data_lm_fcm <- act_data_wo_na %>% select(Distancia, Velocidad, Calorias)
+cor(act_data_lm_fcm)
+
+````
+
+> Dada la correlación entre Calorias y Distancia, lo cual tiene bastante lógica, ponemos en duda si es mejor el modelo con o sin Calorias. Por lo tanto lanzamos el modelo sin calorias para comparar.
+
+````{r}
+
+lm_act_data_wo_na <- lm(data = act_data_wo_na, FCMedia~Distancia+Velocidad)
+summary(lm_act_data_wo_na)
+
+````
+
+> Al comparar, vemos que el p-value sigue indicando que las varibles son significativas, pero el $R^2$ es bastante superior en el anterior, con Calorias. 0.5416 >  0.104.
+
+> Es decir que el modelo 2 explica un 54.16% de la varianza de las variables dependientes, que sin ser un valor altísimo, se puede dar por bueno el modelo.
+
+> ¿Con que coeficientes nos quedamos entonces? Distancia, Velocidad y Calorias, con el siguiente sumario:
+
+````{r}
+
+lm_act_data_wo_na <- lm(data = act_data_wo_na, FCMedia~Distancia+Velocidad+Calorias)
+summary(lm_act_data_wo_na)
+
+````
+
+##### **Podemos ver un ejemplo de que hacer con los coeficientes obtenidos**
+
+`````{r}
+
+# Guardamos los coeficientes obtenidos
+coef <- summary(lm_act_data_wo_na)$coefficients
+# Asignamos unos datos de ejemplo para predecir la frecuencia cardiaca media
+
+# Hacemos el cálculo y mostramos el resultado
+Distancia <- 7.5
+Velocidad <- 10.2
+Calorias  <- 450
+
+fcm <- coef[1,1] +
+  coef[2,1]*Distancia +
+  coef[3,1]*Velocidad + 
+  coef[4,1]*Calorias
+
+fcm
+
+````
+
+> Para 7.5 km recorridos a 10.2 Kmh y con un consumo de 450 calorias, el resultado es de 143 ppm
